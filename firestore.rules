@@ -1,0 +1,456 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function getRoom(roomId) {
+      return get(/databases/$(database)/documents/rooms/$(roomId)).data;
+    }
+
+    function roomExists(roomId) {
+      return exists(/databases/$(database)/documents/rooms/$(roomId));
+    }
+
+    function isRoomHostOrCoHost(roomId) {
+      return roomExists(roomId) && (
+        getRoom(roomId).hostId == request.auth.uid ||
+        request.auth.uid in getRoom(roomId).coHostIds
+      );
+    }
+
+    function isRoomActive(roomId) {
+      return roomExists(roomId) && getRoom(roomId).status == 'active';
+    }
+
+    function isValidRoom(data) {
+      return data.keys().hasAll([
+          'roomId', 'meetingCode', 'title', 'hostId', 'coHostIds',
+          'status', 'isLocked', 'isPrivate', 'allowChat', 'allowScreenShare',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'roomId', 'meetingCode', 'title', 'hostId', 'coHostIds',
+          'status', 'isLocked', 'isPrivate', 'allowChat', 'allowScreenShare',
+          'activeSpeakerId', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.roomId)
+        && data.meetingCode is string && data.meetingCode.size() >= 3 && data.meetingCode.size() <= 32
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 140
+        && data.hostId is string && data.hostId.size() >= 1 && data.hostId.size() <= 128
+        && data.coHostIds is list && data.coHostIds.size() <= 10
+        && (data.coHostIds.size() == 0 || data.coHostIds[0] is string)
+        && data.status in ['active', 'ended']
+        && data.isLocked is bool
+        && data.isPrivate is bool
+        && data.allowChat is bool
+        && data.allowScreenShare is bool
+        && (!('activeSpeakerId' in data) || (data.activeSpeakerId is string && data.activeSpeakerId.size() <= 128))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidPresence(data) {
+      return data.keys().hasAll([
+          'roomId', 'userId', 'displayName', 'role', 'isMuted',
+          'cameraEnabled', 'isScreenSharing', 'handRaised', 'kicked',
+          'muteRequested', 'joinedAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'roomId', 'userId', 'displayName', 'avatarUrl', 'role', 'isMuted',
+          'cameraEnabled', 'isScreenSharing', 'handRaised', 'reaction',
+          'reactionAt', 'breakoutRoom', 'kicked', 'muteRequested', 'joinedAt', 'updatedAt'
+        ])
+        && isValidId(data.roomId)
+        && data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80
+        && (!('avatarUrl' in data) || (data.avatarUrl is string && data.avatarUrl.size() <= 500))
+        && data.role in ['host', 'co_host', 'participant']
+        && data.isMuted is bool
+        && data.cameraEnabled is bool
+        && data.isScreenSharing is bool
+        && data.handRaised is bool
+        && (!('reaction' in data) || (data.reaction is string && data.reaction.size() <= 16))
+        && (!('reactionAt' in data) || data.reactionAt is number)
+        && (!('breakoutRoom' in data) || (data.breakoutRoom is string && data.breakoutRoom.size() <= 64))
+        && data.kicked is bool
+        && data.muteRequested is bool
+        && data.joinedAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidChatMessage(data) {
+      return data.keys().hasAll(['roomId', 'senderId', 'senderName', 'body', 'messageType', 'createdAt'])
+        && data.keys().hasOnly(['roomId', 'senderId', 'senderName', 'body', 'messageType', 'createdAt'])
+        && isValidId(data.roomId)
+        && data.senderId is string && data.senderId == request.auth.uid && data.senderId.size() <= 128
+        && data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 80
+        && data.body is string && data.body.size() >= 1 && data.body.size() <= 2000
+        && data.messageType in ['text', 'system', 'ai_note']
+        && data.createdAt == request.time;
+    }
+
+    function isValidWaitingRequest(data) {
+      return data.keys().hasAll(['roomId', 'hostId', 'userId', 'displayName', 'status', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['roomId', 'hostId', 'userId', 'displayName', 'status', 'createdAt', 'updatedAt'])
+        && isValidId(data.roomId)
+        && data.hostId is string && data.hostId.size() >= 1 && data.hostId.size() <= 128
+        && data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80
+        && data.status in ['pending', 'admitted', 'denied']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidPoll(data) {
+      return data.keys().hasAll(['roomId', 'creatorId', 'creatorName', 'question', 'options', 'votes', 'isClosed', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['roomId', 'creatorId', 'creatorName', 'question', 'options', 'votes', 'isClosed', 'createdAt', 'updatedAt'])
+        && isValidId(data.roomId)
+        && data.creatorId is string && data.creatorId.size() >= 1 && data.creatorId.size() <= 128
+        && data.creatorName is string && data.creatorName.size() >= 1 && data.creatorName.size() <= 80
+        && data.question is string && data.question.size() >= 1 && data.question.size() <= 300
+        && data.options is list && data.options.size() >= 2 && data.options.size() <= 6
+        && data.options[0] is string && data.options[0].size() <= 120
+        && data.votes is map && data.votes.size() <= 200
+        && data.isClosed is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidQuestion(data) {
+      return data.keys().hasAll(['roomId', 'authorId', 'authorName', 'text', 'upvoterIds', 'answered', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['roomId', 'authorId', 'authorName', 'text', 'upvoterIds', 'answered', 'createdAt', 'updatedAt'])
+        && isValidId(data.roomId)
+        && data.authorId is string && data.authorId.size() >= 1 && data.authorId.size() <= 128
+        && data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 80
+        && data.text is string && data.text.size() >= 1 && data.text.size() <= 600
+        && data.upvoterIds is list && data.upvoterIds.size() <= 50
+        && (data.upvoterIds.size() == 0 || data.upvoterIds[0] is string)
+        && data.answered is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidStroke(data) {
+      return data.keys().hasAll(['roomId', 'authorId', 'color', 'width', 'points', 'createdAt'])
+        && data.keys().hasOnly(['roomId', 'authorId', 'color', 'width', 'points', 'createdAt'])
+        && isValidId(data.roomId)
+        && data.authorId is string && data.authorId == request.auth.uid && data.authorId.size() <= 128
+        && data.color is string && data.color.size() >= 4 && data.color.size() <= 24
+        && data.width is number && data.width >= 1 && data.width <= 32
+        && data.points is list && data.points.size() >= 2 && data.points.size() <= 600
+        && data.points[0] is number
+        && data.createdAt == request.time;
+    }
+
+    function isValidSignal(data) {
+      return data.keys().hasAll(['roomId', 'fromUserId', 'toUserId', 'signalType', 'payload', 'createdAt'])
+        && data.keys().hasOnly(['roomId', 'fromUserId', 'toUserId', 'signalType', 'payload', 'createdAt'])
+        && isValidId(data.roomId)
+        && data.fromUserId is string && data.fromUserId == request.auth.uid && data.fromUserId.size() <= 128
+        && data.toUserId is string && data.toUserId.size() >= 1 && data.toUserId.size() <= 128
+        && data.signalType in ['offer', 'answer', 'ice']
+        && data.payload is string && data.payload.size() >= 1 && data.payload.size() <= 24000
+        && data.createdAt == request.time;
+    }
+
+    match /rooms/{roomId} {
+      allow get: if isSignedIn() && isValidId(roomId);
+      allow list: if false;
+
+      allow create: if isSignedIn()
+        && isValidId(roomId)
+        && isValidRoom(incoming())
+        && incoming().roomId == roomId
+        && incoming().hostId == request.auth.uid
+        && incoming().status == 'active'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isSignedIn()
+        && isValidId(roomId)
+        && isValidRoom(incoming())
+        && existing().status == 'active'
+        && incoming().roomId == existing().roomId
+        && incoming().meetingCode == existing().meetingCode
+        && incoming().hostId == existing().hostId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          // Host / co-host controls
+          (
+            (existing().hostId == request.auth.uid || request.auth.uid in existing().coHostIds)
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'title', 'coHostIds', 'status', 'isLocked', 'isPrivate',
+              'allowChat', 'allowScreenShare', 'activeSpeakerId', 'updatedAt'
+            ])
+          )
+          ||
+          // Active speaker highlight update by participant
+          (
+            incoming().diff(existing()).affectedKeys().hasOnly(['activeSpeakerId', 'updatedAt'])
+          )
+        );
+
+      allow delete: if isSignedIn() && isValidId(roomId) && existing().hostId == request.auth.uid;
+
+      match /presence/{participantId} {
+        allow get: if isSignedIn() && isValidId(roomId) && isValidId(participantId);
+        allow list: if isSignedIn() && resource.data.roomId == roomId;
+
+        allow create: if isSignedIn()
+          && isValidId(roomId)
+          && isValidId(participantId)
+          && participantId == request.auth.uid
+          && isValidPresence(incoming())
+          && incoming().roomId == roomId
+          && incoming().userId == request.auth.uid
+          && incoming().kicked == false
+          && incoming().muteRequested == false
+          && incoming().joinedAt == request.time
+          && incoming().updatedAt == request.time
+          && isRoomActive(roomId);
+
+        allow update: if isSignedIn()
+          && isValidId(roomId)
+          && isValidId(participantId)
+          && isValidPresence(incoming())
+          && incoming().roomId == existing().roomId
+          && incoming().userId == existing().userId
+          && incoming().joinedAt == existing().joinedAt
+          && incoming().updatedAt == request.time
+          && isRoomActive(roomId)
+          && (
+            // Participant updating own media/hand/reaction/breakout state
+            (
+              participantId == request.auth.uid
+              && incoming().role == existing().role
+              && incoming().kicked == existing().kicked
+              && incoming().diff(existing()).affectedKeys().hasOnly([
+                'displayName', 'avatarUrl', 'isMuted', 'cameraEnabled', 'isScreenSharing',
+                'handRaised', 'reaction', 'reactionAt', 'breakoutRoom', 'muteRequested', 'updatedAt'
+              ])
+            )
+            ||
+            // Host / co-host managing participant role, mute request, kick, or breakout
+            (
+              isRoomHostOrCoHost(roomId)
+              && incoming().diff(existing()).affectedKeys().hasOnly([
+                'role', 'kicked', 'muteRequested', 'breakoutRoom', 'updatedAt'
+              ])
+            )
+          );
+
+        allow delete: if isSignedIn()
+          && isValidId(roomId)
+          && isValidId(participantId)
+          && (participantId == request.auth.uid || isRoomHostOrCoHost(roomId));
+      }
+
+      match /messages/{messageId} {
+        allow get: if isSignedIn() && isValidId(roomId) && isValidId(messageId);
+        allow list: if isSignedIn() && resource.data.roomId == roomId;
+        allow create: if isSignedIn()
+          && isValidId(roomId)
+          && isValidId(messageId)
+          && isValidChatMessage(incoming())
+          && incoming().roomId == roomId
+          && isRoomActive(roomId)
+          && (getRoom(roomId).allowChat == true || isRoomHostOrCoHost(roomId));
+        allow update: if false;
+        allow delete: if isSignedIn()
+          && isValidId(roomId)
+          && isValidId(messageId)
+          && (existing().senderId == request.auth.uid || isRoomHostOrCoHost(roomId));
+      }
+
+      match /waiting_room/{requestId} {
+        allow get: if isSignedIn()
+          && isValidId(roomId)
+          && isValidId(requestId)
+          && (requestId == request.auth.uid || isRoomHostOrCoHost(roomId));
+        allow list: if isSignedIn()
+          && resource.data.roomId == roomId
+          && (resource.data.hostId == request.auth.uid || resource.data.userId == request.auth.uid);
+
+        allow create: if isSignedIn()
+          && isValidId(roomId)
+          && isValidId(requestId)
+          && requestId == request.auth.uid
+          && isValidWaitingRequest(incoming())
+          && incoming().roomId == roomId
+          && incoming().userId == request.auth.uid
+          && incoming().status == 'pending'
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && isRoomActive(roomId)
+          && incoming().hostId == getRoom(roomId).hostId;
+
+        allow update: if isSignedIn()
+          && isValidId(roomId)
+          && isValidId(requestId)
+          && isValidWaitingRequest(incoming())
+          && existing().status == 'pending'
+          && incoming().roomId == existing().roomId
+          && incoming().hostId == existing().hostId
+          && incoming().userId == existing().userId
+          && incoming().displayName == existing().displayName
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && isRoomHostOrCoHost(roomId)
+          && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']);
+
+        allow delete: if isSignedIn()
+          && isValidId(roomId)
+          && isValidId(requestId)
+          && (requestId == request.auth.uid || isRoomHostOrCoHost(roomId));
+      }
+
+      match /polls/{pollId} {
+        allow get: if isSignedIn() && isValidId(roomId) && isValidId(pollId);
+        allow list: if isSignedIn() && resource.data.roomId == roomId;
+
+        allow create: if isSignedIn()
+          && isValidId(roomId)
+          && isValidId(pollId)
+          && isValidPoll(incoming())
+          && incoming().roomId == roomId
+          && incoming().creatorId == request.auth.uid
+          && incoming().isClosed == false
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && isRoomActive(roomId);
+
+        allow update: if isSignedIn()
+          && isValidId(roomId)
+          && isValidId(pollId)
+          && isValidPoll(incoming())
+          && existing().isClosed == false
+          && incoming().roomId == existing().roomId
+          && incoming().creatorId == existing().creatorId
+          && incoming().creatorName == existing().creatorName
+          && incoming().question == existing().question
+          && incoming().options == existing().options
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && isRoomActive(roomId)
+          && (
+            // Participant voting
+            (
+              incoming().isClosed == false
+              && incoming().diff(existing()).affectedKeys().hasOnly(['votes', 'updatedAt'])
+            )
+            ||
+            // Creator or host closing poll
+            (
+              (existing().creatorId == request.auth.uid || isRoomHostOrCoHost(roomId))
+              && incoming().diff(existing()).affectedKeys().hasOnly(['isClosed', 'updatedAt'])
+            )
+          );
+
+        allow delete: if isSignedIn()
+          && isValidId(roomId)
+          && isValidId(pollId)
+          && (existing().creatorId == request.auth.uid || isRoomHostOrCoHost(roomId));
+      }
+
+      match /questions/{questionId} {
+        allow get: if isSignedIn() && isValidId(roomId) && isValidId(questionId);
+        allow list: if isSignedIn() && resource.data.roomId == roomId;
+
+        allow create: if isSignedIn()
+          && isValidId(roomId)
+          && isValidId(questionId)
+          && isValidQuestion(incoming())
+          && incoming().roomId == roomId
+          && incoming().authorId == request.auth.uid
+          && incoming().answered == false
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && isRoomActive(roomId);
+
+        allow update: if isSignedIn()
+          && isValidId(roomId)
+          && isValidId(questionId)
+          && isValidQuestion(incoming())
+          && incoming().roomId == existing().roomId
+          && incoming().authorId == existing().authorId
+          && incoming().authorName == existing().authorName
+          && incoming().text == existing().text
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && isRoomActive(roomId)
+          && (
+            // Any participant upvoting
+            incoming().diff(existing()).affectedKeys().hasOnly(['upvoterIds', 'updatedAt'])
+            ||
+            // Host / co-host / author marking answered
+            (
+              (existing().authorId == request.auth.uid || isRoomHostOrCoHost(roomId))
+              && incoming().diff(existing()).affectedKeys().hasOnly(['answered', 'updatedAt'])
+            )
+          );
+
+        allow delete: if isSignedIn()
+          && isValidId(roomId)
+          && isValidId(questionId)
+          && (existing().authorId == request.auth.uid || isRoomHostOrCoHost(roomId));
+      }
+
+      match /whiteboard/{strokeId} {
+        allow get: if isSignedIn() && isValidId(roomId) && isValidId(strokeId);
+        allow list: if isSignedIn() && resource.data.roomId == roomId;
+        allow create: if isSignedIn()
+          && isValidId(roomId)
+          && isValidId(strokeId)
+          && isValidStroke(incoming())
+          && incoming().roomId == roomId
+          && isRoomActive(roomId);
+        allow update: if false;
+        allow delete: if isSignedIn()
+          && isValidId(roomId)
+          && isValidId(strokeId)
+          && (existing().authorId == request.auth.uid || isRoomHostOrCoHost(roomId));
+      }
+
+      match /signals/{signalId} {
+        allow get: if isSignedIn()
+          && isValidId(roomId)
+          && isValidId(signalId)
+          && (existing().toUserId == request.auth.uid || existing().fromUserId == request.auth.uid);
+        allow list: if isSignedIn()
+          && resource.data.roomId == roomId
+          && (resource.data.toUserId == request.auth.uid || resource.data.fromUserId == request.auth.uid);
+        allow create: if isSignedIn()
+          && isValidId(roomId)
+          && isValidId(signalId)
+          && isValidSignal(incoming())
+          && incoming().roomId == roomId
+          && isRoomActive(roomId);
+        allow update: if false;
+        allow delete: if isSignedIn()
+          && isValidId(roomId)
+          && isValidId(signalId)
+          && (existing().toUserId == request.auth.uid || existing().fromUserId == request.auth.uid);
+      }
+    }
+  }
+}

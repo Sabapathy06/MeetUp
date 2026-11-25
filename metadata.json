@@ -1,0 +1,11 @@
+{
+  "name": "MeetUp",
+  "description": "Full-stack video conferencing and real-time collaboration platform with HD meetings, screen sharing, host controls, scheduling, and Gemini AI voice assistance.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

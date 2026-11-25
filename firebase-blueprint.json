@@ -1,0 +1,165 @@
+{
+  "entities": {
+    "Room": {
+      "title": "Meeting Room",
+      "description": "Real-time state for an active ConnectMeet video conference room.",
+      "type": "object",
+      "properties": {
+        "roomId": { "type": "string", "minLength": 3, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "meetingCode": { "type": "string", "minLength": 3, "maxLength": 32 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 140 },
+        "hostId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "coHostIds": { "type": "array", "description": "Bounded list of up to 10 co-host UIDs." },
+        "status": { "type": "string", "enum": ["active", "ended"] },
+        "isLocked": { "type": "boolean" },
+        "isPrivate": { "type": "boolean" },
+        "allowChat": { "type": "boolean" },
+        "allowScreenShare": { "type": "boolean" },
+        "activeSpeakerId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["roomId", "meetingCode", "title", "hostId", "coHostIds", "status", "isLocked", "isPrivate", "allowChat", "allowScreenShare", "createdAt", "updatedAt"]
+    },
+    "Presence": {
+      "title": "Room Participant Presence",
+      "description": "Live media, hand-raise, and reaction status for a participant in a room.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "avatarUrl": { "type": "string", "maxLength": 500 },
+        "role": { "type": "string", "enum": ["host", "co_host", "participant"] },
+        "isMuted": { "type": "boolean" },
+        "cameraEnabled": { "type": "boolean" },
+        "isScreenSharing": { "type": "boolean" },
+        "handRaised": { "type": "boolean" },
+        "reaction": { "type": "string", "maxLength": 16 },
+        "reactionAt": { "type": "number" },
+        "breakoutRoom": { "type": "string", "maxLength": 64 },
+        "kicked": { "type": "boolean" },
+        "muteRequested": { "type": "boolean" },
+        "joinedAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "displayName", "role", "isMuted", "cameraEnabled", "isScreenSharing", "handRaised", "kicked", "muteRequested", "joinedAt", "updatedAt"]
+    },
+    "ChatMessage": {
+      "title": "Room Chat Message",
+      "description": "Real-time chat message sent inside an active meeting room.",
+      "type": "object",
+      "properties": {
+        "senderId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "senderName": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "body": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "messageType": { "type": "string", "enum": ["text", "system", "ai_note"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["senderId", "senderName", "body", "messageType", "createdAt"]
+    },
+    "WaitingRoomRequest": {
+      "title": "Waiting Room Entry Request",
+      "description": "Pending admission request for a restricted or locked meeting room.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "status": { "type": "string", "enum": ["pending", "admitted", "denied"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "displayName", "status", "createdAt", "updatedAt"]
+    },
+    "Poll": {
+      "title": "Meeting Poll",
+      "description": "Interactive real-time poll created during a meeting.",
+      "type": "object",
+      "properties": {
+        "creatorId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "creatorName": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "question": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "options": { "type": "array", "description": "2 to 6 poll option strings." },
+        "votes": { "type": "object", "description": "Map of userId to option index." },
+        "isClosed": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["creatorId", "creatorName", "question", "options", "votes", "isClosed", "createdAt", "updatedAt"]
+    },
+    "Question": {
+      "title": "Meeting Q&A Item",
+      "description": "Audience Q&A question with upvotes and answered status.",
+      "type": "object",
+      "properties": {
+        "authorId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "authorName": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "text": { "type": "string", "minLength": 1, "maxLength": 600 },
+        "upvoterIds": { "type": "array", "description": "Bounded list of up to 50 upvoter UIDs." },
+        "answered": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["authorId", "authorName", "text", "upvoterIds", "answered", "createdAt", "updatedAt"]
+    },
+    "WhiteboardStroke": {
+      "title": "Collaborative Whiteboard Stroke",
+      "description": "Vector drawing stroke synced across all room participants.",
+      "type": "object",
+      "properties": {
+        "authorId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "color": { "type": "string", "minLength": 4, "maxLength": 24 },
+        "width": { "type": "number" },
+        "points": { "type": "array", "description": "Bounded flat array of x,y coordinates (up to 600 values)." },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["authorId", "color", "width", "points", "createdAt"]
+    },
+    "WebRtcSignal": {
+      "title": "WebRTC Peer Signaling Payload",
+      "description": "SDP offer/answer or ICE candidate relayed between two participants in a room.",
+      "type": "object",
+      "properties": {
+        "fromUserId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "toUserId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "signalType": { "type": "string", "enum": ["offer", "answer", "ice"] },
+        "payload": { "type": "string", "minLength": 1, "maxLength": 24000 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["fromUserId", "toUserId", "signalType", "payload", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/rooms/{roomId}": {
+      "schema": { "$ref": "#/entities/Room" },
+      "description": "Active meeting room state and host controls."
+    },
+    "/rooms/{roomId}/presence/{participantId}": {
+      "schema": { "$ref": "#/entities/Presence" },
+      "description": "Live presence and media states of room participants."
+    },
+    "/rooms/{roomId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/ChatMessage" },
+      "description": "Real-time meeting chat messages."
+    },
+    "/rooms/{roomId}/waiting_room/{requestId}": {
+      "schema": { "$ref": "#/entities/WaitingRoomRequest" },
+      "description": "Waiting room admission requests."
+    },
+    "/rooms/{roomId}/polls/{pollId}": {
+      "schema": { "$ref": "#/entities/Poll" },
+      "description": "Interactive meeting polls."
+    },
+    "/rooms/{roomId}/questions/{questionId}": {
+      "schema": { "$ref": "#/entities/Question" },
+      "description": "Live Q&A items."
+    },
+    "/rooms/{roomId}/whiteboard/{strokeId}": {
+      "schema": { "$ref": "#/entities/WhiteboardStroke" },
+      "description": "Collaborative whiteboard strokes."
+    },
+    "/rooms/{roomId}/signals/{signalId}": {
+      "schema": { "$ref": "#/entities/WebRtcSignal" },
+      "description": "Peer-to-peer WebRTC SDP and ICE signals."
+    }
+  }
+}
